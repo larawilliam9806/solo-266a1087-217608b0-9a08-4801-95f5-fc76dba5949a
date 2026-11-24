@@ -20,6 +20,10 @@ class ValidationError(Exception):
     """批次校验失败，整批退回。"""
 
 
+class TimeParseError(ValidationError):
+    """时刻字符串格式或时区不符合要求。"""
+
+
 def parse_utc(raw: str) -> datetime:
     """解析 ISO-8601 UTC 时刻，统一得到 tz-aware UTC datetime。"""
     text = raw.strip()
@@ -28,9 +32,9 @@ def parse_utc(raw: str) -> datetime:
     try:
         dt = datetime.fromisoformat(text)
     except ValueError as exc:
-        raise ValidationError(f"时刻格式非法: {raw!r}，应为 ISO-8601 UTC") from exc
+        raise TimeParseError(f"时刻格式非法: {raw!r}，应为 ISO-8601 UTC") from exc
     if dt.tzinfo is None:
-        raise ValidationError(f"时刻缺少时区信息，需为 UTC: {raw!r}")
+        raise TimeParseError(f"时刻缺少时区信息，需为 UTC: {raw!r}")
     return dt.astimezone(timezone.utc)
 
 

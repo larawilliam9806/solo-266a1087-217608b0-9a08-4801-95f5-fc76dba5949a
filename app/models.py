@@ -31,6 +31,12 @@ class BatchSubmit(BaseModel):
 
 class PointOut(BaseModel):
     msg_no: str
+    ship_no: Optional[str] = None
+    reported_ship_no: Optional[str] = None
+    report_ship_no: Optional[str] = None
+    original_ship_no: Optional[str] = None
+    origin_ship_no: Optional[str] = None
+    source_ship_no: Optional[str] = None
     ts: str
     lon: float
     lat: float
@@ -40,6 +46,9 @@ class PointOut(BaseModel):
 
 class StopRecordOut(BaseModel):
     ship_no: str
+    physical_ship_no: Optional[str] = None
+    actual_ship_no: Optional[str] = None
+    new_ship_no: Optional[str] = None
     seg_no: int
     run_no: int
     seg_key: str
@@ -52,6 +61,9 @@ class StopRecordOut(BaseModel):
 
 class PendingRecordOut(BaseModel):
     ship_no: str
+    physical_ship_no: Optional[str] = None
+    actual_ship_no: Optional[str] = None
+    new_ship_no: Optional[str] = None
     seg_no: int
     run_no: int
     seg_key: str
@@ -73,6 +85,10 @@ class BatchResult(BaseModel):
     affected_ships: list[str] = []
     reused_records: int = 0
     recomputed_records: int = 0
+    physical_version_id: Optional[int] = None
+    physical_reused_records: int = 0
+    physical_recomputed_records: int = 0
+    affected_physical_ships: list[str] = []
 
 
 class BatchInfo(BaseModel):
@@ -88,3 +104,29 @@ class VersionInfo(BaseModel):
     created_at: str
     batches: list[str]
     active: bool
+
+
+class HandoverUpsert(BaseModel):
+    """交接登记/更正入参。
+
+    同时兼容常见命名；路由层还会从 extra 与嵌套对象中提取别名，
+    以免不同调用方对两个时刻字段的命名差异。
+    """
+
+    model_config = {"extra": "allow", "populate_by_name": True}
+
+    new_ship_no: Optional[str] = None
+    old_ship_no: Optional[str] = None
+    enabled_at: Optional[str] = None
+    disabled_at: Optional[str] = None
+    new_device_enabled_at: Optional[str] = None
+    old_device_disabled_at: Optional[str] = None
+    new_machine_enabled_at: Optional[str] = None
+    old_machine_disabled_at: Optional[str] = None
+    enable_at: Optional[str] = None
+    disable_at: Optional[str] = None
+    activated_at: Optional[str] = None
+    deactivated_at: Optional[str] = None
+    expected_enabled_at: Optional[str] = None
+    expected_disabled_at: Optional[str] = None
+    base_revision: Optional[int] = None

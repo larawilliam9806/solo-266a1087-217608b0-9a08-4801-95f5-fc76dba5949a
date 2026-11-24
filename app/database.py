@@ -85,10 +85,71 @@ CREATE TABLE IF NOT EXISTS pending_record (
     FOREIGN KEY (version_id) REFERENCES result_version(version_id)
 );
 
+-- 新旧船号交接。new_ship_no / old_ship_no 均不得再参加其他交接，
+-- handover_participant 用主键在数据库层兜底跨两列的唯一性。
+CREATE TABLE IF NOT EXISTS ship_handover (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    new_ship_no      TEXT NOT NULL UNIQUE,
+    old_ship_no      TEXT NOT NULL UNIQUE,
+    enabled_at       TEXT NOT NULL,       -- 新机启用 UTC
+    disabled_at      TEXT NOT NULL,       -- 旧机停用 UTC
+    revision         INTEGER NOT NULL DEFAULT 1,
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL,
+    CHECK (enabled_at < disabled_at)
+);
+
+CREATE TABLE IF NOT EXISTS handover_participant (
+    ship_no          TEXT PRIMARY KEY,
+    new_ship_no      TEXT NOT NULL,
+    role             TEXT NOT NULL CHECK (role IN ('new', 'old')),
+    FOREIGN KEY (new_ship_no) REFERENCES ship_handover(new_ship_no) ON DELETE CASCADE
+);
+
+-- 按实船（交接后的新船号）保存的两套结果之一：实船停靠记录
+CREATE TABLE IF NOT EXISTS physical_stop_record (
+    version_id      INTEGER NOT NULL,
+    ship_no         TEXT NOT NULL,        -- 实船新船号
+    seg_no          INTEGER NOT NULL,
+    run_no          INTEGER NOT NULL,
+    entry_point     TEXT NOT NULL,        -- JSON 中保留原报船号
+    exit_point      TEXT NOT NULL,
+    before_point    TEXT NOT NULL,
+    after_point     TEXT NOT NULL,
+    seg_key         TEXT NOT NULL,
+    PRIMARY KEY (version_id, ship_no, seg_no, run_no),
+    FOREIGN KEY (version_id) REFERENCES result_version(version_id)
+);
+
+-- 实船待补记录
+CREATE TABLE IF NOT EXISTS physical_pending_record (
+    version_id      INTEGER NOT NULL,
+    ship_no         TEXT NOT NULL,
+    seg_no          INTEGER NOT NULL,
+    run_no          INTEGER NOT NULL,
+    entry_point     TEXT NOT NULL,
+    exit_point      TEXT NOT NULL,
+    before_point    TEXT,
+    after_point     TEXT,
+    reason          TEXT NOT NULL,
+    seg_key         TEXT NOT NULL,
+    PRIMARY KEY (version_id, ship_no, seg_no, run_no),
+    FOREIGN KEY (version_id) REFERENCES result_version(version_id)
+);
+
+-- 船号级数据修订号：交接更正乐观校验只关心本组新旧船号，
+-- 因此无关船号的批次提交不会阻止更正发布。
+CREATE TABLE IF NOT EXISTS ship_data_revision (
+    ship_no    TEXT PRIMARY KEY,
+    revision   INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE INDEX IF NOT EXISTS idx_msg_ship_ts ON message(ship_no, ts, active);
 CREATE INDEX IF NOT EXISTS idx_src_batch   ON message_source(batch_no);
 CREATE INDEX IF NOT EXISTS idx_stop_ver    ON stop_record(version_id, ship_no);
 CREATE INDEX IF NOT EXISTS idx_pend_ver    ON pending_record(version_id, ship_no);
+CREATE INDEX IF NOT EXISTS idx_physical_stop_ver ON physical_stop_record(version_id, ship_no);
+CREATE INDEX IF NOT EXISTS idx_physical_pend_ver ON physical_pending_record(version_id, ship_no);
 CREATE INDEX IF NOT EXISTS idx_ver_active  ON result_version(active);
 """
 

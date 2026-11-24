@@ -95,6 +95,48 @@ curl "http://localhost:8000/ships/SH01/stops?version_id=1"  # 指定历史版本
 每条记录附**首/末港内点**以及**可用港外点**（待补可能为 `null`）的时刻、消息号和**现行来源批号**
 （消息已失效时来源为空数组，但历史版本记录仍可查）。
 
+### 交接与实船连续记录
+
+同一艘船更换设备后，新船号会与旧船号并报。可按**新船号**登记一组唯一交接：
+
+```bash
+curl -X POST http://localhost:8000/handovers \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "new_ship_no": "SH-NEW",
+    "old_ship_no": "SH-OLD",
+    "new_device_enabled_at": "2026-11-24T08:00:00Z",
+    "old_device_disabled_at": "2026-11-24T09:00:00Z"
+  }'
+
+# 更正两个时刻（PUT/PATCH，或 POST /handovers/{new_ship_no}/correct）
+curl -X PUT http://localhost:8000/handovers/SH-NEW \
+  -H 'Content-Type: application/json' \
+  -d '{"enabled_at":"2026-11-24T07:55:00Z","disabled_at":"2026-11-24T09:05:00Z"}'
+```
+
+规则：
+
+- 必须先启用新机、再停用旧机；每个新旧船号都只能参加一组交接，冲突返回 `409`。
+- `ts < enabled_at` 只取旧号；`enabled_at <= ts < disabled_at` 为并报期，合并两号观测，同刻优先新号。
+- `ts >= disabled_at` 只取新号；若停用时刻的新号点也因最后来源撤下而失效，则回退到该刻仍有效的旧号点。
+- 并报期同刻新号的最后一个 `message_source` 被换交撤下后，下一次结果生效时自动恢复同刻仍有效的旧号点。
+- 合并后的点继续使用原 30 分钟断段、港内连续点和两侧港外点判定；点内 `ship_no`/`reported_ship_no` 是原报船号，`source_batches` 是现行来源批号。
+- 批次事务同时写入“按报文船号”和“按实船新船号”两套结果；交接更正与当前实船结果在同一事务生效，写失败整体回滚。
+- 更正先在事务外核算，发布时复检本组交接修订号、新旧船消息和来源指纹。无关船号批次可在此期间先提交；本组数据有变则 `409` 退回更正。
+
+实船查询：
+
+```bash
+curl http://localhost:8000/physical-ships/SH-NEW/stops
+curl http://localhost:8000/physical-ships/SH-NEW/pending
+curl "http://localhost:8000/physical-ships/SH-NEW/stops?version_id=1"
+# 等价路径：/real-ships/SH-NEW/stops、/actual-ships/SH-NEW/stops，
+# 或原路径加 ?physical=true / ?view=physical。
+```
+
+原 `/ships/{报文船号}/stops|pending` 行为不变。
+
 ### 其他
 
 | 方法/路径 | 说明 |
